@@ -11,25 +11,22 @@
  * every minute and you'll be immediately warned of a new result by email.
  * e.g : * * * * * /usr/bin/env php /home/username/leboncoin/demo/email.php
  *
- * Note:
+ * /!\ Require:
  * You must add swiftmailer to Composer. (composer require swiftmailer/swiftmailer)
  */
 
 require_once '../vendor/autoload.php';
 
-$leboncoin_name = 'Locations Paris 17e';
-$leboncoin_result_url = 'https://www.leboncoin.fr/locations/offres/ile_de_france/?th=1&location=Paris%2075017&parrot=0&sqs=5&ros=2&ret=2';
+require_once 'opt_email.php';
 
-$mailer = (object) [
-    'smtp_host' => 'smtp.gmail.com',
-    'smtp_user' => '',
-    'smtp_pass' => '',
-    'from'      => '',
-    'to'        => '',
-    'body'      => '',
+$opt_leboncoin = [
+    'name' => 'Lumie',
+    'url'  => 'https://www.leboncoin.fr/annonces/offres/ile_de_france/paris/?th=1&q=lumie&it=1&parrot=0',
 ];
 
-$file = sha1($leboncoin_name) . ".srz";
+$body = '';
+
+$file = sha1($opt_leboncoin['name']) . ".srz";
 if (!file_exists($file)) {
     file_put_contents($file, serialize([]));
 }
@@ -37,7 +34,7 @@ if (!file_exists($file)) {
 $knownAds= unserialize(file_get_contents($file));
 $newAds = 0;
 
-$searchResults = (new Lbc\GetFrom)->search($leboncoin_result_url, true);
+$searchResults = (new Lbc\GetFrom)->search($opt_leboncoin['url'], true);
 
 foreach ($searchResults['ads'] as $ad) {
 
@@ -47,13 +44,13 @@ foreach ($searchResults['ads'] as $ad) {
     $knownAds[] = $ad->id;
 
     if (!empty($mailer->body)) {
-        $mailer->body .= str_repeat('-', 80) . "\n\n";
+        $body .= str_repeat('-', 80) . "\n\n";
     }
     foreach ($ad as $key => $value) {
-        $mailer->body .= "{$key}: {$value}\n";
+        $body .= "{$key}: {$value}\n";
     }
 
-    $mailer->body .= "\n";
+    $body .= "\n";
     $newAds++;
 }
 
@@ -63,16 +60,16 @@ if (!$newAds) {
 
 file_put_contents($file, serialize($knownAds));
 
-$transport = Swift_SmtpTransport::newInstance($mailer->smtp_host, 465, 'ssl')
-    ->setUsername($mailer->smtp_user)
-    ->setPassword($mailer->smtp_pass);
+$transport = Swift_SmtpTransport::newInstance($opt_email['smtp_host'], $opt_email['smtp_port'], $opt_email['smtp_enco'])
+    ->setUsername($opt_email['smtp_user'])
+    ->setPassword($opt_email['smtp_pass']);
 
 $mailer = Swift_Mailer::newInstance($transport);
 
 $message = Swift_Message::newInstance()
-    ->setSubject('LeBonCoin: ' . count($unknown) . ' nouvelles annonces pour ' . $leboncoin_name)
-    ->setFrom([$mailer->from])
-    ->setTo([$mailer->to])
-    ->setBody($mailer->body);
+    ->setSubject('LeBonCoin: ' . $newAds . ' nouvelles annonces pour ' . $opt_leboncoin['name'])
+    ->setFrom([$opt_email['from']])
+    ->setTo([$opt_email['to']])
+    ->setBody($body);
 
 $mailer->send($message);
